@@ -17,9 +17,6 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.33.0
         version: 0.33.1
-      '@supabase/supabase-js':
-        specifier: ^2.45.0
-        version: 2.104.0
       hono:
         specifier: ^4.6.0
         version: 4.12.14
