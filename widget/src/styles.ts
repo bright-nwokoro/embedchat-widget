@@ -3,6 +3,7 @@ import type { Config } from "./types";
 export function buildStyles(config: Config): string {
   const color = config.primaryColor;
   const posX = config.position === "bottom-left" ? "left: 20px;" : "right: 20px;";
+  const originX = config.position === "bottom-left" ? "left" : "right";
   return `
     :host {
       all: initial;
@@ -44,7 +45,7 @@ export function buildStyles(config: Config): string {
       flex-direction: column;
       overflow: hidden;
       z-index: 2147483647;
-      transform-origin: bottom right;
+      transform-origin: bottom ${originX};
       transform: scale(0.95);
       opacity: 0;
       pointer-events: none;
