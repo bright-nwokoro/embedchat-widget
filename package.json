@@ -15,7 +15,8 @@
     "deploy": "pnpm run build && pnpm --filter=api-worker deploy && pnpm --filter=cdn-worker deploy && pnpm --filter=demo deploy",
     "dev:api": "pnpm --filter=api-worker dev",
     "dev:widget": "pnpm --filter=widget dev",
-    "dev:demo": "pnpm --filter=demo dev"
+    "dev:demo": "pnpm --filter=demo dev",
+    "ingest": "pnpm --filter=ingestion ingest"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

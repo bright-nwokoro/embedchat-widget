@@ -3,3 +3,4 @@ packages:
   - api-worker
   - cdn-worker
   - demo
+  - ingestion
