@@ -2,10 +2,10 @@
 
 > A drop-in AI chat widget for any website. One `<script>` tag, Shadow-DOM isolated, configured by data-attributes. ~3.6kb gzipped (well under the 35kb budget).
 
-**🔗 Live demo:** https://embedchat-demo.brightnwokoro.dev
+**🔗 Live demo:** [https://embedchat-demo.brightnwokoro.dev](https://embedchat-demo.brightnwokoro.dev)
 **👤 Built by:** [Bright Nwokoro](https://brightnwokoro.dev) · [hello@brightnwokoro.dev](mailto:hello@brightnwokoro.dev)
 
-> **Phase 1** of a phased build. Widget + streaming LLM backend + live demo. RAG grounding, admin UI, and other roadmap items are Phase 2 / Phase 3 — see [`docs/superpowers/specs/`](docs/superpowers/specs/) for the design arc and [`docs/superpowers/plans/`](docs/superpowers/plans/) for the executed plan.
+> **Phase 1** of a phased build. Widget + streaming LLM backend + live demo. RAG grounding, admin UI, and other roadmap items are Phase 2 / Phase 3 — see `[docs/superpowers/specs/](docs/superpowers/specs/)` for the design arc and `[docs/superpowers/plans/](docs/superpowers/plans/)` for the executed plan.
 
 ---
 
@@ -23,7 +23,7 @@ EmbedChat is the productized middle path. The site owner pastes one `<script>` t
 
 - **One-line install** — paste a `<script>` tag, widget appears
 - **Shadow DOM isolation** — host-site CSS can't leak in, widget CSS can't leak out
-- **Config via `data-*` attributes** — primary color, greeting, position, model
+- **Config via `data-`* attributes** — primary color, greeting, position, model
 - **Streaming responses** — token-by-token rendering via Server-Sent Events
 - **Multi-provider backend** — OpenAI `gpt-4o-mini` or Anthropic `claude-haiku` via a `data-model` toggle
 - **Server-side LLM proxy** — the widget never sees the API key
@@ -67,15 +67,17 @@ Three Cloudflare deploys, one subdomain each under `brightnwokoro.dev`:
 
 ## Stack
 
-| Layer        | Tech                                                         |
-| ------------ | ------------------------------------------------------------ |
-| Widget       | Vanilla TypeScript 5, Shadow DOM, esbuild                    |
-| Backend      | Hono 4, TypeScript, Cloudflare Workers runtime               |
-| LLM          | OpenAI `gpt-4o-mini` default, Anthropic `claude-haiku` toggle |
-| Rate limits  | Workers KV (per-IP, per-origin, per-day token budget)        |
-| Streaming    | Server-Sent Events                                           |
-| CDN          | Cloudflare Workers (bundle) + Cloudflare Pages (demo page)   |
-| Testing      | Vitest + jsdom (widget), @cloudflare/vitest-pool-workers / Miniflare (api-worker) |
+
+| Layer       | Tech                                                                              |
+| ----------- | --------------------------------------------------------------------------------- |
+| Widget      | Vanilla TypeScript 5, Shadow DOM, esbuild                                         |
+| Backend     | Hono 4, TypeScript, Cloudflare Workers runtime                                    |
+| LLM         | OpenAI `gpt-4o-mini` default, Anthropic `claude-haiku` toggle                     |
+| Rate limits | Workers KV (per-IP, per-origin, per-day token budget)                             |
+| Streaming   | Server-Sent Events                                                                |
+| CDN         | Cloudflare Workers (bundle) + Cloudflare Pages (demo page)                        |
+| Testing     | Vitest + jsdom (widget), @cloudflare/vitest-pool-workers / Miniflare (api-worker) |
+
 
 ## Quick start
 
@@ -105,22 +107,24 @@ pnpm test         # 49 tests: 28 widget + 21 api-worker
 pnpm build        # widget bundle + Workers dry-run + static demo copy
 ```
 
-Then follow [`docs/DEPLOY.md`](docs/DEPLOY.md) to set up Cloudflare DNS, Workers secrets, and KV.
+Then follow `[docs/DEPLOY.md](docs/DEPLOY.md)` to set up Cloudflare DNS, Workers secrets, and KV.
 
 ## Data attributes (Phase 1 reference)
 
-| Attribute              | Required | Default                     | Purpose                                |
-| ---------------------- | -------- | --------------------------- | -------------------------------------- |
-| `data-site-id`         | ✅       | —                           | Tenant identifier (`demo-public` for the shared demo) |
-| `data-api-url`         | ✅       | —                           | Base URL of the api-worker (e.g. `https://embedchat-api.brightnwokoro.dev`) |
-| `data-primary-color`   |          | `#7C5CFF`                   | Bubble + accent color (any valid `#rgb` or `#rrggbb`) |
-| `data-greeting`        |          | `"Hi, how can I help?"`     | First-message copy                     |
-| `data-system-prompt`   |          | Fixed demo prompt           | Per-site LLM persona (ignored for `demo-public`) |
-| `data-position`        |          | `bottom-right`              | `bottom-left` or `bottom-right`        |
-| `data-model`           |          | `gpt-4o-mini`               | `gpt-4o-mini` or `claude-haiku`        |
-| `data-max-messages`    |          | `30`                        | Rolling client-side history limit      |
-| `data-avatar-url`      |          | —                           | Custom bot avatar (accepted but unused in Phase 1) |
-| `data-knowledge-url`   |          | —                           | Accepted and logged; RAG grounding ships in Phase 2 |
+
+| Attribute            | Required | Default                 | Purpose                                                                     |
+| -------------------- | -------- | ----------------------- | --------------------------------------------------------------------------- |
+| `data-site-id`       | ✅        | —                       | Tenant identifier (`demo-public` for the shared demo)                       |
+| `data-api-url`       | ✅        | —                       | Base URL of the api-worker (e.g. `https://embedchat-api.brightnwokoro.dev`) |
+| `data-primary-color` |          | `#7C5CFF`               | Bubble + accent color (any valid `#rgb` or `#rrggbb`)                       |
+| `data-greeting`      |          | `"Hi, how can I help?"` | First-message copy                                                          |
+| `data-system-prompt` |          | Fixed demo prompt       | Per-site LLM persona (ignored for `demo-public`)                            |
+| `data-position`      |          | `bottom-right`          | `bottom-left` or `bottom-right`                                             |
+| `data-model`         |          | `gpt-4o-mini`           | `gpt-4o-mini` or `claude-haiku`                                             |
+| `data-max-messages`  |          | `30`                    | Rolling client-side history limit                                           |
+| `data-avatar-url`    |          | —                       | Custom bot avatar (accepted but unused in Phase 1)                          |
+| `data-knowledge-url` |          | —                       | Accepted and logged; RAG grounding ships in Phase 2                         |
+
 
 ## Project structure
 
@@ -195,12 +199,14 @@ embedchat-widget/
 
 For a typical demo at ~500 questions/day:
 
+
 | Item                           | Monthly cost (USD) |
 | ------------------------------ | ------------------ |
 | Cloudflare Workers (free tier) | $0                 |
 | Cloudflare Pages (free tier)   | $0                 |
 | LLM inference (`gpt-4o-mini`)  | ~$15               |
 | **Total**                      | **~$15/month**     |
+
 
 The daily token budget caps worst-case abuse spend at ~$2.50/day on the most expensive configured model.
 
@@ -210,16 +216,16 @@ The daily token budget caps worst-case abuse spend at ~$2.50/day on the most exp
 **Backend:** `wrangler deploy` to Cloudflare Workers at `embedchat-api.brightnwokoro.dev`.
 **Demo site:** `wrangler pages deploy` to `embedchat-demo.brightnwokoro.dev`.
 
-Full runbook in [`docs/DEPLOY.md`](docs/DEPLOY.md).
+Full runbook in `[docs/DEPLOY.md](docs/DEPLOY.md)`.
 
 ## Roadmap
 
 Phase 1 is what this repo ships today. Phase 2 and 3 will add:
 
-- [ ] Phase 2 — **RAG grounding** (the headline AI-engineering upgrade): `data-knowledge-url` activates a crawl → chunk → embed → retrieve pipeline against Postgres + pgvector, scoped per site.
-- [ ] Phase 3 — **Productization**: admin UI, named site-ids with client-supplied system prompts + origin allowlists, conversation persistence, analytics, lead capture, handoff-to-human.
-- [ ] Per-site custom fonts loaded via Shadow DOM
-- [ ] Multi-language auto-detect
+- Phase 2 — **RAG grounding** (the headline AI-engineering upgrade): `data-knowledge-url` activates a crawl → chunk → embed → retrieve pipeline against Postgres + pgvector, scoped per site.
+- Phase 3 — **Productization**: admin UI, named site-ids with client-supplied system prompts + origin allowlists, conversation persistence, analytics, lead capture, handoff-to-human.
+- Per-site custom fonts loaded via Shadow DOM
+- Multi-language auto-detect
 
 ## Contributing
 
@@ -232,6 +238,6 @@ MIT — see [LICENSE](LICENSE).
 ## Contact
 
 Freelance AI engineering — RAG, chat widgets, AI copilots, end-to-end.
-**Email:** hello@brightnwokoro.dev
-**Portfolio:** https://brightnwokoro.dev
-**Book a call:** https://calendly.com/brightnwokoro/intro
+**Email:** [hello@brightnwokoro.dev](mailto:hello@brightnwokoro.dev)
+**Portfolio:** [https://brightnwokoro.dev](https://brightnwokoro.dev)
+**Book a call:** [https://calendly.com/brightnwokoro/30min](https://calendly.com/brightnwokoro/30min)
