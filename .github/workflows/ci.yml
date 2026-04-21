@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter=widget build
+      - name: bundle size check
+        run: |
+          SIZE=$(gzip -c widget/dist/embedchat.js | wc -c)
+          echo "gzipped bundle: $SIZE bytes"
+          if [ "$SIZE" -gt 35840 ]; then
+            echo "ERROR: bundle exceeds 35kb gzipped ceiling"
+            exit 1
+          fi
+      - run: pnpm --filter=cdn-worker build
+      - run: pnpm --filter=api-worker build
+      - run: pnpm --filter=demo build
