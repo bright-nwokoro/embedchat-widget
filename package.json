@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm -r --filter=widget build && pnpm -r --filter=cdn-worker build && pnpm -r --filter=api-worker build && pnpm -r --filter=demo build",
+    "build": "pnpm --filter=widget build && pnpm --filter=cdn-worker build && pnpm --filter=api-worker build && pnpm --filter=demo build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
