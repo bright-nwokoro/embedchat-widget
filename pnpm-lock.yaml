@@ -49,6 +49,12 @@ importers:
         specifier: ^3.80.0
         version: 3.114.17(@cloudflare/workers-types@4.20260421.1)
 
+  demo:
+    devDependencies:
+      wrangler:
+        specifier: ^3.80.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260421.1)
+
   widget:
     devDependencies:
       '@vitest/coverage-v8':

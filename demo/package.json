@@ -1,0 +1,14 @@
+{
+  "name": "demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && python3 -m http.server --directory dist 8080",
+    "deploy": "node build.mjs && wrangler pages deploy dist --project-name=embedchat-demo --branch=main"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

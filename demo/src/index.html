@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EmbedChat — drop-in AI chat widget demo</title>
+    <meta
+      name="description"
+      content="A one-script AI chat widget for any website. Shadow-DOM isolated, streaming, ~30kb."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <h1>EmbedChat</h1>
+        <p class="tagline">
+          A drop-in AI chat widget for any website. One
+          <code>&lt;script&gt;</code> tag, Shadow-DOM isolated, configured by
+          data-attributes. ~30kb bundled.
+        </p>
+        <p class="cta">
+          <a class="btn" href="https://github.com/brightnwokoro/embedchat-widget">
+            Source on GitHub
+          </a>
+        </p>
+      </header>
+
+      <section>
+        <h2>Try it</h2>
+        <p>
+          The chat bubble in the bottom-right corner of this page is the widget
+          itself — talk to it and see it stream replies token-by-token. The
+          whole conversation runs against the same backend anyone else installs.
+        </p>
+      </section>
+
+      <section>
+        <h2>Add it to your own site</h2>
+        <p>
+          Copy this snippet into any HTML page. The widget mounts itself and
+          handles the rest.
+        </p>
+        <pre><code>&lt;script
+  src="https://embedchat-cdn.brightnwokoro.dev/embedchat.js"
+  data-site-id="demo-public"
+  data-api-url="https://embedchat-api.brightnwokoro.dev"
+  data-primary-color="#7C5CFF"
+  data-greeting="Hi — ask me anything."
+  defer
+&gt;&lt;/script&gt;</code></pre>
+        <p class="fine-print">
+          The <code>demo-public</code> site-id is rate-limited for public use
+          (20 req/IP/10min, 500k tokens/day globally). For your own quotas,
+          clone the repo and deploy your own backend.
+        </p>
+      </section>
+
+      <section>
+        <h2>What's under the hood</h2>
+        <ul>
+          <li>Vanilla TypeScript widget, Shadow DOM isolation</li>
+          <li>Streaming responses via Server-Sent Events</li>
+          <li>
+            Hono backend on Cloudflare Workers, provider abstraction over
+            OpenAI + Anthropic
+          </li>
+          <li>Prompt-injection defense via tag wrapping</li>
+          <li>KV-backed rate limits</li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>
+          Built by
+          <a href="https://brightnwokoro.dev">Bright Nwokoro</a>
+          — freelance AI engineering.
+        </p>
+      </footer>
+    </main>
+
+    <script
+      src="https://embedchat-cdn.brightnwokoro.dev/embedchat.js"
+      data-site-id="demo-public"
+      data-api-url="https://embedchat-api.brightnwokoro.dev"
+      data-primary-color="#7C5CFF"
+      data-greeting="Hi — I'm the demo assistant for EmbedChat. Ask me anything."
+      defer
+    ></script>
+  </body>
+</html>
