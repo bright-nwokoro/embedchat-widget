@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SELF } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 
-// Inlined because readFileSync is unavailable in Miniflare runtime.
-// Content mirrors test/fixtures/openai-short.txt.
 const OPENAI_SHORT = `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}
 
 data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}
@@ -14,18 +12,50 @@ data: [DONE]
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(OPENAI_SHORT, {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      }),
-    ),
+    vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
+        return new Response(
+          JSON.stringify([
+            { site_id: "demo-public", status: "ready", chunk_count: 1, last_indexed_at: null },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (u.startsWith(env.SUPABASE_URL + "/rest/v1/rpc/match_chunks")) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "1",
+              source_path: "README.md",
+              heading_path: "## E2E",
+              content: "known-e2e-chunk",
+              similarity: 0.9,
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (u === "https://api.openai.com/v1/embeddings") {
+        return new Response(
+          JSON.stringify({ data: [{ embedding: new Array(1536).fill(0.1) }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (u === "https://api.openai.com/v1/chat/completions") {
+        return new Response(OPENAI_SHORT, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return new Response("unexpected", { status: 500 });
+    }),
   );
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("e2e: /chat smoke", () => {
-  it("streams at least one token + a done frame for demo-public", async () => {
+describe("e2e: /chat smoke — grounded", () => {
+  it("streams tokens and injects retrieved context", async () => {
     const res = await SELF.fetch("https://fake/chat", {
       method: "POST",
       headers: {
@@ -35,7 +65,7 @@ describe("e2e: /chat smoke", () => {
       },
       body: JSON.stringify({
         siteId: "demo-public",
-        messages: [{ role: "user", content: "hello" }],
+        messages: [{ role: "user", content: "tell me about e2e" }],
         systemPrompt: null,
         model: "gpt-4o-mini",
       }),
