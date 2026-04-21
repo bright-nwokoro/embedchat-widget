@@ -6,5 +6,6 @@
     "lib": ["ES2022"],
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*", "test/**/*", "bin/**/*"]
+  "include": ["src/**/*", "test/**/*", "bin/**/*"],
+  "exclude": ["test/fixtures/**"]
 }

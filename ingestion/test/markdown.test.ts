@@ -43,9 +43,9 @@ describe("chunkMarkdown", () => {
 
   it("assigns chunk_index starting at 0 within the source", () => {
     const chunks = chunkMarkdown(loadSample(), { sourcePath: "sample.md" });
-    expect(chunks[0].chunk_index).toBe(0);
+    expect(chunks[0]!.chunk_index).toBe(0);
     for (let i = 1; i < chunks.length; i++) {
-      expect(chunks[i].chunk_index).toBe(chunks[i - 1].chunk_index + 1);
+      expect(chunks[i]!.chunk_index).toBe(chunks[i - 1]!.chunk_index + 1);
     }
   });
 
