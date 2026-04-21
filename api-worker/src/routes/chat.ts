@@ -13,6 +13,9 @@ import type { ChatRequest, PublicModelId } from "../types";
 import { MODEL_MAP } from "../llm/provider";
 import { createOpenAIProvider } from "../llm/openai";
 import { createAnthropicProvider } from "../llm/anthropic";
+import { embedQuery } from "../rag/embed-query";
+import { getSiteRagState, retrieveChunks } from "../rag/retrieve";
+import { buildContextSystemPrompt } from "../rag/context";
 
 export const chatRoute = new Hono<{ Bindings: Env }>();
 
@@ -152,12 +155,38 @@ chatRoute.post("/", async (c) => {
 
   const wrapped = buildMessages(trimmed);
 
+  // Step 7a: best-effort RAG retrieval.
+  let systemPromptFinal = systemPrompt;
+  try {
+    const ragState = await getSiteRagState(
+      c.env.SUPABASE_URL,
+      c.env.SUPABASE_ANON_KEY,
+      body.siteId,
+    );
+    if (ragState?.status === "ready") {
+      const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user")?.content;
+      if (lastUserMsg && lastUserMsg.trim().length > 0) {
+        const queryEmbedding = await embedQuery(lastUserMsg, c.env.OPENAI_API_KEY);
+        const chunks = await retrieveChunks(
+          c.env.SUPABASE_URL,
+          c.env.SUPABASE_ANON_KEY,
+          body.siteId,
+          queryEmbedding,
+          5,
+        );
+        systemPromptFinal = buildContextSystemPrompt(systemPrompt, chunks);
+      }
+    }
+  } catch (e) {
+    console.warn("RAG retrieval failed, falling back to ungrounded:", (e as Error).message);
+  }
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
       try {
         const iter = provider.stream({
-          systemPrompt,
+          systemPrompt: systemPromptFinal,
           messages: wrapped,
           maxTokens: site.maxOutputTokens,
           apiKey,

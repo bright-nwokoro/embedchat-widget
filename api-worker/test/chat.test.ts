@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SELF } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 
 // Inlined because readFileSync is unavailable in Miniflare runtime.
 // Reference copy at test/fixtures/openai-short.txt.
@@ -141,6 +141,169 @@ describe("POST /chat", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("access-control-allow-methods")).toContain("POST");
+  });
+});
+
+describe("POST /chat with RAG", () => {
+  it("injects <context> into the system prompt when site.status=ready", async () => {
+    const capturedOpenAIBody = { body: "" };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init?: any) => {
+        const u = String(url);
+        if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
+          return new Response(
+            JSON.stringify([
+              { site_id: "demo-public", status: "ready", chunk_count: 2, last_indexed_at: null },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u.startsWith(env.SUPABASE_URL + "/rest/v1/rpc/match_chunks")) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: "1",
+                source_path: "README.md",
+                heading_path: "## Rate limits",
+                content: "Three KV-counter gates.",
+                similarity: 0.92,
+              },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u === "https://api.openai.com/v1/embeddings") {
+          return new Response(
+            JSON.stringify({ data: [{ embedding: new Array(1536).fill(0.1) }] }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u === "https://api.openai.com/v1/chat/completions") {
+          capturedOpenAIBody.body = (init as any).body;
+          return new Response(
+            `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\ndata: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\ndata: [DONE]\n\n`,
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+
+    const res = await SELF.fetch("https://fake/chat", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://rag.example",
+        "cf-connecting-ip": "10.10.10.10",
+      },
+      body: JSON.stringify({
+        siteId: "demo-public",
+        messages: [{ role: "user", content: "how does rate limiting work?" }],
+        systemPrompt: null,
+        model: "gpt-4o-mini",
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    const openaiBody = JSON.parse(capturedOpenAIBody.body);
+    const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");
+    expect(systemMsg).toBeTruthy();
+    expect(systemMsg.content).toContain("<context source=\"README.md\"");
+    expect(systemMsg.content).toContain("Three KV-counter gates.");
+  });
+
+  it("falls back to ungrounded when Supabase is down", async () => {
+    const capturedOpenAIBody = { body: "" };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init?: any) => {
+        const u = String(url);
+        if (u.startsWith(env.SUPABASE_URL)) {
+          return new Response("upstream down", { status: 503 });
+        }
+        if (u === "https://api.openai.com/v1/chat/completions") {
+          capturedOpenAIBody.body = (init as any).body;
+          return new Response(
+            `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\ndata: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\ndata: [DONE]\n\n`,
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+
+    const res = await SELF.fetch("https://fake/chat", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://rag-down.example",
+        "cf-connecting-ip": "10.10.10.11",
+      },
+      body: JSON.stringify({
+        siteId: "demo-public",
+        messages: [{ role: "user", content: "hi" }],
+        systemPrompt: null,
+        model: "gpt-4o-mini",
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    const openaiBody = JSON.parse(capturedOpenAIBody.body);
+    const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");
+    expect(systemMsg.content).not.toContain("<context");
+  });
+
+  it("skips RAG when site.status is not 'ready'", async () => {
+    const capturedOpenAIBody = { body: "" };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init?: any) => {
+        const u = String(url);
+        if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
+          return new Response(
+            JSON.stringify([
+              { site_id: "demo-public", status: "pending", chunk_count: 0, last_indexed_at: null },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (u === "https://api.openai.com/v1/chat/completions") {
+          capturedOpenAIBody.body = (init as any).body;
+          return new Response(
+            `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\ndata: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\ndata: [DONE]\n\n`,
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+
+    const res = await SELF.fetch("https://fake/chat", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://pending.example",
+        "cf-connecting-ip": "10.10.10.12",
+      },
+      body: JSON.stringify({
+        siteId: "demo-public",
+        messages: [{ role: "user", content: "hi" }],
+        systemPrompt: null,
+        model: "gpt-4o-mini",
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    const openaiBody = JSON.parse(capturedOpenAIBody.body);
+    const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");
+    expect(systemMsg.content).not.toContain("<context");
   });
 });
 
