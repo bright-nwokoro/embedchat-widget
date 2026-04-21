@@ -39,9 +39,10 @@ async function main() {
   };
 
   const started = Date.now();
+  const fileArg = args.file;
   const count = await ingest(config, {
     dryRun: args.dryRun,
-    filter: args.file ? (p) => p === args.file : undefined,
+    ...(fileArg ? { filter: (p: string) => p === fileArg } : {}),
   });
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
   console.log(`ingest: done — ${count} chunks in ${elapsed}s`);
