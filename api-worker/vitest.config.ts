@@ -11,6 +11,8 @@ export default defineWorkersConfig({
           bindings: {
             OPENAI_API_KEY: "test-openai-key",
             ANTHROPIC_API_KEY: "test-anthropic-key",
+            SUPABASE_URL: "https://test.supabase.co",
+            SUPABASE_ANON_KEY: "test-anon-key",
             ENVIRONMENT: "test",
           },
         },
