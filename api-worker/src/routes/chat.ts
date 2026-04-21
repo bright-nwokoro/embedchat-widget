@@ -82,6 +82,29 @@ chatRoute.post("/", async (c) => {
     return c.json({ error: "origin-not-allowed" }, 403);
   }
 
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const originHost = (() => {
+    try {
+      return new URL(origin).hostname || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+
+  const ipOk = await checkIpLimit(c.env.RATE_LIMIT, ip);
+  if (!ipOk) return c.json({ error: "rate-limited-ip" }, 429, headers);
+
+  const originOk = await checkOriginLimit(c.env.RATE_LIMIT, originHost);
+  if (!originOk) return c.json({ error: "rate-limited-origin" }, 429, headers);
+
+  const budgetOk = await checkTokenBudget(
+    c.env.RATE_LIMIT,
+    LIMITS.DAILY_TOKEN_BUDGET,
+  );
+  if (!budgetOk) {
+    return c.json({ error: "daily-demo-limit", retryAfterHours: 24 }, 429, headers);
+  }
+
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return c.json({ error: "invalid-messages" }, 400, headers);
   }
@@ -104,29 +127,6 @@ chatRoute.post("/", async (c) => {
   }
   if (!site.allowedModels.includes(body.model)) {
     return c.json({ error: "model-not-allowed" }, 400, headers);
-  }
-
-  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-  const originHost = (() => {
-    try {
-      return new URL(origin).hostname || "unknown";
-    } catch {
-      return "unknown";
-    }
-  })();
-
-  const ipOk = await checkIpLimit(c.env.RATE_LIMIT, ip);
-  if (!ipOk) return c.json({ error: "rate-limited-ip" }, 429, headers);
-
-  const originOk = await checkOriginLimit(c.env.RATE_LIMIT, originHost);
-  if (!originOk) return c.json({ error: "rate-limited-origin" }, 429, headers);
-
-  const budgetOk = await checkTokenBudget(
-    c.env.RATE_LIMIT,
-    LIMITS.DAILY_TOKEN_BUDGET,
-  );
-  if (!budgetOk) {
-    return c.json({ error: "daily-demo-limit", retryAfterHours: 24 }, 429, headers);
   }
 
   const trimmed = body.messages.slice(-site.maxHistoryTurns);
