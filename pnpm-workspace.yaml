@@ -1,0 +1,5 @@
+packages:
+  - widget
+  - api-worker
+  - cdn-worker
+  - demo

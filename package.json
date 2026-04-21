@@ -1,0 +1,23 @@
+{
+  "name": "embedchat-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drop-in AI chat widget for any website",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=widget build && pnpm -r --filter=cdn-worker build && pnpm -r --filter=api-worker build && pnpm -r --filter=demo build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "deploy": "pnpm run build && pnpm --filter=api-worker deploy && pnpm --filter=cdn-worker deploy && pnpm --filter=demo deploy",
+    "dev:api": "pnpm --filter=api-worker dev",
+    "dev:widget": "pnpm --filter=widget dev",
+    "dev:demo": "pnpm --filter=demo dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
