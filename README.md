@@ -103,7 +103,7 @@ git clone https://github.com/brightnwokoro/embedchat-widget
 cd embedchat-widget
 
 pnpm install
-pnpm test         # 49 tests: 28 widget + 21 api-worker
+pnpm test         # 94 tests: 28 widget + 40 api-worker + 26 ingestion
 pnpm build        # widget bundle + Workers dry-run + static demo copy
 ```
 
