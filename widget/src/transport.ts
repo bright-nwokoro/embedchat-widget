@@ -22,7 +22,7 @@ export async function* streamChat(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(params.body),
-      signal: params.signal,
+      ...(params.signal && { signal: params.signal }),
     });
   } catch (e) {
     yield { type: "error", message: `Request failed: ${(e as Error).message}` };
