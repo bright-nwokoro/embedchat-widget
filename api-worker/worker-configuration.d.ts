@@ -4,3 +4,7 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   ENVIRONMENT: string;
 }
+
+declare module "cloudflare:test" {
+  interface ProvidedEnv extends Env {}
+}
