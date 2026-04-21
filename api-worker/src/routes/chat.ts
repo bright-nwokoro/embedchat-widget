@@ -47,6 +47,12 @@ function sseFrame(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
+// Phase-1 simplification: OPTIONS preflight unconditionally returns `*`.
+// This is correct for demo-public (the only active site-id). Phase 3 adds
+// named site-ids with origin allowlists; that will require the client to
+// pass siteId in a way visible to preflight (e.g. path-based /chat/:siteId
+// or a custom header), and this handler to then call corsHeaders(origin, site)
+// the way the POST handler does.
 chatRoute.options("/", () => {
   return new Response(null, {
     status: 204,
