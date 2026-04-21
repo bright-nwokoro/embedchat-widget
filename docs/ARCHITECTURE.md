@@ -1,6 +1,6 @@
 # Architecture
 
-Phase 1 architecture. See [the Phase 1 design spec](superpowers/specs/2026-04-21-embedchat-phase-1-design.md) for rationale.
+Phase 1 + Phase 2 architecture. See [the Phase 1 design spec](superpowers/specs/2026-04-21-embedchat-phase-1-design.md) for rationale.
 
 ## Components
 
@@ -17,9 +17,10 @@ Phase 1 architecture. See [the Phase 1 design spec](superpowers/specs/2026-04-21
 │   └────────────────┘                │      │  ├─ CORS                      │
 └─────────────────────────────────────┘      │  ├─ Rate-limit (KV)           │
                                              │  ├─ Prompt wrap               │
-                                             │  └─ Provider dispatch ──┐     │
-                                             └───────────────────────┬─┴─────┘
-                                                                     │
+                                             │  ├─ RAG retrieval (step 7a) ──┼──▶ ┌─────────────┐
+                                             │  └─ Provider dispatch ──┐     │    │ Supabase    │
+                                             └───────────────────────┬─┴─────┘    │ (pgvector)  │
+                                                                     │            └─────────────┘
                                                        ┌─────────────┴───────┐
                                                        │ OpenAI / Anthropic  │
                                                        └─────────────────────┘
@@ -37,6 +38,9 @@ Widget                                    api-worker (Hono)                  LLM
   │                                             │ 4. Validate shape            │
   │                                             │ 5. Trim history              │
   │                                             │ 6. Wrap user msgs in tags    │
+  │                                             │ 7a. Best-effort RAG (≤2000ms)│
+  │                                             │     → embed → retrieve       │
+  │                                             │     → inject <context>       │
   │                                             │ 7. Start provider.stream ─▶ │
   │ ◀── SSE: data:{"t":"token","v":"..."} ──── ◀│ ◀── stream chunks ───────── │
   │ ◀── SSE: data:{"t":"token","v":"..."} ──── ◀│                              │
@@ -75,29 +79,6 @@ Widget                                    api-worker (Hono)                  LLM
 
 Phase 1 stores nothing. Every request is processed in-memory, streamed out, and forgotten. Only KV counters persist, and they contain no message content — just integer counts against scoped keys.
 
-## Phase 2: RAG retrieval step
-
-```
-Widget                api-worker (Hono)                    Supabase (pgvector)    OpenAI
-  │                        │                                        │               │
-  │─ POST /chat ─────────▶ │                                        │               │
-  │                        │ Phase 1 steps 1-6 (CORS, rate-limit,   │               │
-  │                        │   validate, trim, wrap)                │               │
-  │                        │                                        │               │
-  │                        │ 7a. If site.status=ready in sites:     │               │
-  │                        │   ─── GET /rest/v1/sites ───────────▶ │               │
-  │                        │ ◀─ site row ─────────────────────────  │               │
-  │                        │   ─── POST /v1/embeddings (query) ─────────────────▶ │
-  │                        │ ◀─ embedding ──────────────────────────────────────── │
-  │                        │   ─── POST /rest/v1/rpc/match_chunks ─▶               │
-  │                        │ ◀─ top-5 chunks ──────────────────────                │
-  │                        │   build system prompt with <context>                   │
-  │                        │                                        │               │
-  │                        │ 7. Provider stream ─ POST /v1/chat/completions ─────▶ │
-  │ ◀── SSE tokens ─────── │ ◀── stream chunks ───────────────────────────────── │
-  │ ◀── SSE done ───────── │   incrementTokens(KV)                                  │
-```
-
 ## Phase 2 file additions
 
 | Path | Responsibility |
@@ -110,6 +91,6 @@ Widget                api-worker (Hono)                    Supabase (pgvector)  
 | `ingestion/src/store/supabase.ts`          | Upsert site + replace chunks |
 | `ingestion/src/orchestrator.ts`            | Wires crawl → chunk → embed → store |
 | `api-worker/src/rag/embed-query.ts`        | Query embedding per chat |
-| `api-worker/src/rag/retrieve.ts`           | Site state + top-k via RPC; fails closed |
+| `api-worker/src/rag/retrieve.ts`           | Site state + top-k via RPC; fails open (returns empty on error for graceful fallback) |
 | `api-worker/src/rag/context.ts`            | Formats `<context>` blocks with escaping |
 | `api-worker/src/routes/chat.ts` (modified) | Inserts step 7a |
