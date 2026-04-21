@@ -1,0 +1,4 @@
+name = "embedchat-cdn"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+workers_dev = true
