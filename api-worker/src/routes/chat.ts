@@ -155,27 +155,33 @@ chatRoute.post("/", async (c) => {
 
   const wrapped = buildMessages(trimmed);
 
-  // Step 7a: best-effort RAG retrieval.
+  // Step 7a: best-effort RAG retrieval (capped at 2000ms per spec §4.1).
   let systemPromptFinal = systemPrompt;
   try {
-    const ragState = await getSiteRagState(
-      c.env.SUPABASE_URL,
-      c.env.SUPABASE_ANON_KEY,
-      body.siteId,
-    );
-    if (ragState?.status === "ready") {
+    const ragPromise = (async () => {
+      const ragState = await getSiteRagState(
+        c.env.SUPABASE_URL,
+        c.env.SUPABASE_ANON_KEY,
+        body.siteId,
+      );
+      if (ragState?.status !== "ready") return null;
       const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user")?.content;
-      if (lastUserMsg && lastUserMsg.trim().length > 0) {
-        const queryEmbedding = await embedQuery(lastUserMsg, c.env.OPENAI_API_KEY);
-        const chunks = await retrieveChunks(
-          c.env.SUPABASE_URL,
-          c.env.SUPABASE_ANON_KEY,
-          body.siteId,
-          queryEmbedding,
-          5,
-        );
-        systemPromptFinal = buildContextSystemPrompt(systemPrompt, chunks);
-      }
+      if (!lastUserMsg || lastUserMsg.trim().length === 0) return null;
+      const queryEmbedding = await embedQuery(lastUserMsg, c.env.OPENAI_API_KEY);
+      return await retrieveChunks(
+        c.env.SUPABASE_URL,
+        c.env.SUPABASE_ANON_KEY,
+        body.siteId,
+        queryEmbedding,
+        5,
+      );
+    })();
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2000),
+    );
+    const chunks = await Promise.race([ragPromise, timeoutPromise]);
+    if (chunks && chunks.length > 0) {
+      systemPromptFinal = buildContextSystemPrompt(systemPrompt, chunks);
     }
   } catch (e) {
     console.warn("RAG retrieval failed, falling back to ungrounded:", (e as Error).message);

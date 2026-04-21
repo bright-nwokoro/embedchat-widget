@@ -305,6 +305,54 @@ describe("POST /chat with RAG", () => {
     const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");
     expect(systemMsg.content).not.toContain("<context");
   });
+
+  it("times out RAG if Supabase hangs and falls back to ungrounded", async () => {
+    const capturedOpenAIBody = { body: "" };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init?: any) => {
+        const u = String(url);
+        if (u.startsWith(env.SUPABASE_URL)) {
+          // Never resolves — simulates a hung Supabase.
+          return new Promise<Response>(() => {});
+        }
+        if (u === "https://api.openai.com/v1/chat/completions") {
+          capturedOpenAIBody.body = (init as any).body;
+          return new Response(
+            `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\ndata: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\ndata: [DONE]\n\n`,
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+
+    const t0 = Date.now();
+    const res = await SELF.fetch("https://fake/chat", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://timeout.example",
+        "cf-connecting-ip": "10.10.10.13",
+      },
+      body: JSON.stringify({
+        siteId: "demo-public",
+        messages: [{ role: "user", content: "hi" }],
+        systemPrompt: null,
+        model: "gpt-4o-mini",
+      }),
+    });
+    const elapsed = Date.now() - t0;
+    expect(res.status).toBe(200);
+    await res.text();
+    // Should fall back to ungrounded after the 2000ms RAG timeout, not hang indefinitely.
+    expect(elapsed).toBeLessThan(5000);
+
+    const openaiBody = JSON.parse(capturedOpenAIBody.body);
+    const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");
+    expect(systemMsg.content).not.toContain("<context");
+  }, 10000);
 });
 
 describe("GET /health", () => {
