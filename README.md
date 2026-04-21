@@ -1,74 +1,81 @@
 # EmbedChat
 
-> A drop-in AI chat widget for any website. One `<script>` tag, Shadow-DOM isolated, configured by data-attributes. ~30kb bundled.
+> A drop-in AI chat widget for any website. One `<script>` tag, Shadow-DOM isolated, configured by data-attributes. ~3.6kb gzipped (well under the 35kb budget).
 
 **🔗 Live demo:** https://embedchat-demo.brightnwokoro.dev
 **👤 Built by:** [Bright Nwokoro](https://brightnwokoro.dev) · [hello@brightnwokoro.dev](mailto:hello@brightnwokoro.dev)
 
-![EmbedChat demo](./docs/demo.gif)
+> **Phase 1** of a phased build. Widget + streaming LLM backend + live demo. RAG grounding, admin UI, and other roadmap items are Phase 2 / Phase 3 — see [`docs/superpowers/specs/`](docs/superpowers/specs/) for the design arc and [`docs/superpowers/plans/`](docs/superpowers/plans/) for the executed plan.
 
 ---
 
 ## Why this exists
 
-Every SaaS founder wants an AI chat bubble on their site. The options today are bad in different ways:
+Every SaaS founder wants an AI chat bubble on their site. Existing options are bad in different ways:
 
 - **Big chat platforms** (Intercom + AI add-ons) — $100+/month, heavy bundle, requires full auth integration.
 - **Open-source chat components** — good starting points but require the host site to own styling, backend, and LLM keys.
 - **"Build it yourself"** — another two weeks of work per client before anyone sees anything.
 
-EmbedChat is the productized middle path. The site owner pastes one `<script>` tag, sets a primary color and a system prompt via data-attributes, and ships an AI chat experience in under a minute. Shadow DOM guarantees zero CSS collision with the host site. A small edge-deployed backend proxies to the LLM so API keys never leave the server.
+EmbedChat is the productized middle path. The site owner pastes one `<script>` tag, sets a primary color and a greeting via data-attributes, and ships an AI chat experience in under a minute. Shadow DOM guarantees zero CSS collision with the host site. A small edge-deployed backend proxies to the LLM so API keys never leave the server.
 
-Pitched as a $1.5k–$5k productized offer; demo site shows what "installed" looks like so the sale is 80% closed before the first reply.
-
-## What it does
+## What Phase 1 ships
 
 - **One-line install** — paste a `<script>` tag, widget appears
 - **Shadow DOM isolation** — host-site CSS can't leak in, widget CSS can't leak out
-- **Config via `data-*` attributes** — primary color, greeting, system prompt, knowledge source URL
+- **Config via `data-*` attributes** — primary color, greeting, position, model
 - **Streaming responses** — token-by-token rendering via Server-Sent Events
-- **Optional RAG grounding** — point `data-knowledge-url` at a sitemap / Notion export / docs URL, and the backend ingests + indexes it on first install
+- **Multi-provider backend** — OpenAI `gpt-4o-mini` or Anthropic `claude-haiku` via a `data-model` toggle
 - **Server-side LLM proxy** — the widget never sees the API key
-- **~30kb minified** — no React, no Vue, no framework tax on the host page
+- **Prompt-injection defense** — user messages wrapped in `<user_message>...</user_message>` tags; system prompt instructs the model to treat tagged content as untrusted data
+- **Abuse-resistant public demo** — per-IP, per-origin, and per-day token-budget rate limits on the shared `demo-public` site-id
+- **~3.6kb gzipped** — no React, no Vue, no framework tax on the host page
+- **CI-enforced bundle size** — pull requests blow up if the bundle exceeds 35kb gzipped
 
 ## Architecture
+
+Three Cloudflare deploys, one subdomain each under `brightnwokoro.dev`:
 
 ```
   Host site
   ┌─────────────────────────┐
   │ <script                 │
-  │   src=".../embedchat.js"│         ┌────────────────┐
-  │   data-primary-color…   │────────▶│ Cloudflare     │
-  │   data-system-prompt… ▶ │   SSE   │ Workers edge   │────┐
-  │ />                      │         │ backend (Hono) │    │
-  │                         │         └────────────────┘    │
-  │  ┌─── Shadow DOM ───┐   │                               │
-  │  │ Chat bubble UI   │   │         ┌────────────────┐    │
-  │  │ (vanilla TS)     │   │         │ OpenAI / Claude│◀───┘
-  │  └──────────────────┘   │         └────────────────┘
-  └─────────────────────────┘                ▲
-                                             │ (optional)
-                                      ┌──────┴───────┐
-                                      │  Postgres +  │
-                                      │   pgvector   │
-                                      │  (RAG grnd.) │
-                                      └──────────────┘
+  │   src=".../embedchat.js"│         ┌─────────────────────────────────┐
+  │   data-site-id=…        │────────▶│ embedchat-cdn.brightnwokoro.dev │
+  │   data-api-url=…      ▶ │         │ Worker — serves bundle          │
+  │ />                      │         │ cache: 1yr immutable            │
+  │                         │         └─────────────────────────────────┘
+  │  ┌─── Shadow DOM ───┐   │         ┌─────────────────────────────────┐
+  │  │ Bubble + Panel   │   │         │ embedchat-api.brightnwokoro.dev │
+  │  │ (vanilla TS)     │◀──┼─── SSE ─│ Hono app — /chat + /health      │
+  │  └──────────────────┘   │         │  ├ CORS                         │
+  └─────────────────────────┘         │  ├ KV rate limits               │
+                                      │  ├ Prompt-injection wrap        │
+                                      │  └ Provider dispatch ──┐        │
+                                      └──────────────────────┬─┴────────┘
+                                                             ▼
+                                         ┌────────────────────────────┐
+                                         │ OpenAI `gpt-4o-mini`  OR   │
+                                         │ Anthropic `claude-haiku`   │
+                                         └────────────────────────────┘
 ```
 
 - **Widget** is vanilla TypeScript, rendered inside a Shadow Root attached to a single floating container. All internal CSS uses `:host` selectors.
-- **Backend** is a Hono app deployed to Cloudflare Workers. It owns the LLM key, applies the per-site system prompt, and streams responses back to the widget via SSE.
-- **RAG grounding** (optional) — when `data-knowledge-url` is set, the backend crawls + chunks + embeds the source on first install and stores vectors in a shared Postgres + pgvector cluster, scoped by site ID.
+- **api-worker** is a Hono app deployed to Cloudflare Workers. It owns the LLM keys, applies the per-site system prompt, and streams responses via SSE.
+- **cdn-worker** is a tiny Worker that serves `embedchat.js` with long-cache immutable headers and open CORS.
+- **demo** is a single-page static site on Cloudflare Pages.
 
 ## Stack
 
-| Layer       | Tech                                                 |
-| ----------- | ---------------------------------------------------- |
-| Widget      | Vanilla TypeScript 5, Shadow DOM, esbuild            |
-| Backend     | Hono 4, TypeScript, Cloudflare Workers runtime       |
-| LLM         | OpenAI `gpt-4o-mini` default, Claude `haiku` toggle  |
-| Vector DB   | Postgres 16 + pgvector 0.7 (shared tenant-scoped)    |
-| Streaming   | Server-Sent Events                                   |
-| CDN         | Cloudflare (script) + R2 (bundle assets)             |
+| Layer        | Tech                                                         |
+| ------------ | ------------------------------------------------------------ |
+| Widget       | Vanilla TypeScript 5, Shadow DOM, esbuild                    |
+| Backend      | Hono 4, TypeScript, Cloudflare Workers runtime               |
+| LLM          | OpenAI `gpt-4o-mini` default, Anthropic `claude-haiku` toggle |
+| Rate limits  | Workers KV (per-IP, per-origin, per-day token budget)        |
+| Streaming    | Server-Sent Events                                           |
+| CDN          | Cloudflare Workers (bundle) + Cloudflare Pages (demo page)   |
+| Testing      | Vitest + jsdom (widget), @cloudflare/vitest-pool-workers / Miniflare (api-worker) |
 
 ## Quick start
 
@@ -76,159 +83,147 @@ Pitched as a $1.5k–$5k productized offer; demo site shows what "installed" loo
 
 ```html
 <script
-  src="https://cdn.embedchat.dev/embedchat.js"
+  src="https://embedchat-cdn.brightnwokoro.dev/embedchat.js"
+  data-site-id="demo-public"
+  data-api-url="https://embedchat-api.brightnwokoro.dev"
   data-primary-color="#7C5CFF"
-  data-greeting="Hi — ask me anything about Acme."
-  data-system-prompt="You are Acme's support assistant. Be concise."
-  data-knowledge-url="https://acme.com/sitemap.xml"
+  data-greeting="Hi — ask me anything."
   defer
 ></script>
 ```
 
+The `demo-public` site-id is rate-limited for public use (20 req/IP/10min, 200 req/origin/day, 500k-token global daily budget). For your own quotas or a branded system prompt, clone the repo and deploy your own backend.
+
 ### Self-host
 
 ```bash
-git clone https://github.com/bright-nwokoro/embedchat-widget
+git clone https://github.com/brightnwokoro/embedchat-widget
 cd embedchat-widget
 
-# Widget bundle
-cd widget
 pnpm install
-pnpm build                       # outputs dist/embedchat.js (~30kb)
-
-# Backend
-cd ../backend
-cp .env.example .dev.vars        # fill OPENAI_API_KEY, DATABASE_URL
-pnpm install
-pnpm dev                         # http://localhost:8787
+pnpm test         # 49 tests: 28 widget + 21 api-worker
+pnpm build        # widget bundle + Workers dry-run + static demo copy
 ```
 
-Then serve the widget bundle from your CDN and point `<script src>` at it.
+Then follow [`docs/DEPLOY.md`](docs/DEPLOY.md) to set up Cloudflare DNS, Workers secrets, and KV.
 
-## Data attributes (full reference)
+## Data attributes (Phase 1 reference)
 
 | Attribute              | Required | Default                     | Purpose                                |
 | ---------------------- | -------- | --------------------------- | -------------------------------------- |
-| `data-site-id`         | ✅       | —                           | Tenant identifier for this install     |
-| `data-primary-color`   |          | `#7C5CFF`                   | Bubble + accent color                  |
+| `data-site-id`         | ✅       | —                           | Tenant identifier (`demo-public` for the shared demo) |
+| `data-api-url`         | ✅       | —                           | Base URL of the api-worker (e.g. `https://embedchat-api.brightnwokoro.dev`) |
+| `data-primary-color`   |          | `#7C5CFF`                   | Bubble + accent color (any valid `#rgb` or `#rrggbb`) |
 | `data-greeting`        |          | `"Hi, how can I help?"`     | First-message copy                     |
-| `data-system-prompt`   |          | Generic assistant prompt    | Per-site LLM persona and rules         |
-| `data-knowledge-url`   |          | —                           | Optional URL to ingest for RAG grounding |
-| `data-position`        |          | `bottom-right`              | `bottom-left`, `bottom-right`          |
-| `data-model`           |          | `gpt-4o-mini`               | `gpt-4o-mini`, `claude-haiku`          |
-| `data-max-messages`    |          | `30`                        | Rolling history limit                  |
-| `data-avatar-url`      |          | —                           | Custom bot avatar                      |
+| `data-system-prompt`   |          | Fixed demo prompt           | Per-site LLM persona (ignored for `demo-public`) |
+| `data-position`        |          | `bottom-right`              | `bottom-left` or `bottom-right`        |
+| `data-model`           |          | `gpt-4o-mini`               | `gpt-4o-mini` or `claude-haiku`        |
+| `data-max-messages`    |          | `30`                        | Rolling client-side history limit      |
+| `data-avatar-url`      |          | —                           | Custom bot avatar (accepted but unused in Phase 1) |
+| `data-knowledge-url`   |          | —                           | Accepted and logged; RAG grounding ships in Phase 2 |
 
 ## Project structure
 
 ```
 embedchat-widget/
-├── widget/
+├── widget/                          # ~3.6kb gzipped embeddable bundle
 │   ├── src/
-│   │   ├── index.ts              # entry; reads data-* and boots widget
-│   │   ├── root.ts               # Shadow DOM setup
-│   │   ├── ui/
-│   │   │   ├── Bubble.ts
-│   │   │   ├── Panel.ts
-│   │   │   └── MessageList.ts
-│   │   ├── transport.ts          # SSE stream parser
-│   │   └── styles.ts             # injected :host CSS
-│   ├── esbuild.config.mjs
-│   └── dist/embedchat.js
-├── backend/
+│   │   ├── index.ts                 # entry; reads data-* and boots widget
+│   │   ├── root.ts                  # Shadow DOM setup + send controller
+│   │   ├── config.ts                # data-* parsing + validation
+│   │   ├── store.ts                 # pub/sub message + UI state
+│   │   ├── transport.ts             # SSE stream parser
+│   │   ├── styles.ts                # :host-scoped CSS
+│   │   └── ui/                      # Bubble, Panel, MessageList, Composer
+│   ├── test/                        # 28 Vitest tests
+│   └── esbuild.config.mjs
+├── api-worker/                      # Hono app on Cloudflare Workers
 │   ├── src/
-│   │   ├── index.ts              # Hono app + routes
-│   │   ├── routes/
-│   │   │   ├── chat.ts           # SSE chat endpoint
-│   │   │   ├── ingest.ts         # crawl + index knowledge source
-│   │   │   └── admin.ts          # site + knowledge management
-│   │   ├── llm.ts                # OpenAI/Claude providers
-│   │   ├── rag.ts                # retrieval helpers
-│   │   └── db.ts                 # pgvector queries
+│   │   ├── index.ts                 # Hono app + routes wire-up
+│   │   ├── routes/chat.ts           # SSE chat pipeline
+│   │   ├── routes/health.ts         # /health probe
+│   │   ├── sites.ts                 # site registry (demo-public)
+│   │   ├── prompt.ts                # <user_message> wrapping
+│   │   ├── ratelimit.ts             # KV counters
+│   │   └── llm/                     # provider interface + openai + anthropic
+│   ├── test/                        # 21 Miniflare-backed tests
 │   └── wrangler.toml
-├── docs/
-│   ├── DEPLOY.md
-│   └── demo.gif
-└── README.md
+├── cdn-worker/                      # serves embedchat.js with immutable cache
+├── demo/                            # static landing page (Cloudflare Pages)
+├── .github/workflows/ci.yml         # typecheck + tests + bundle-size ceiling
+└── docs/
+    ├── DEPLOY.md                    # Cloudflare + DNS + secrets runbook
+    ├── ARCHITECTURE.md              # request diagrams + file map
+    └── superpowers/
+        ├── specs/2026-04-21-embedchat-phase-1-design.md
+        └── plans/2026-04-21-embedchat-phase-1.md
 ```
 
 ## How it works
 
 ### Widget lifecycle
 
-1. Host page parses the `<script>` tag; `index.ts` reads all `data-*` attributes.
-2. A single `<div>` container is attached to `document.body`; a Shadow Root is created inside it.
-3. All widget UI renders inside the Shadow Root; styles use `:host {}` and local selectors.
-4. User clicks the bubble → panel opens → messages stream from backend over SSE.
+1. Host page parses the `<script>` tag; `index.ts` reads all `data-*` attributes via `document.currentScript`.
+2. A single `<div>` container is attached to `document.body`; a Shadow Root (open mode) is attached.
+3. All widget UI renders inside the Shadow Root; styles use `:host {}` and local selectors — zero leakage either direction.
+4. User clicks the bubble → panel opens → messages stream from the api-worker over SSE.
 
-### Backend request path
+### api-worker request path (POST /chat)
 
 ```
-POST /chat
-{
-  "siteId": "...",
-  "messages": [...],
-  "systemPrompt": "...",
-  "model": "gpt-4o-mini",
-  "knowledgeUrl": "..."   // if RAG enabled
-}
+1. Site lookup      — resolve siteId against sites.ts registry (404 if unknown)
+2. CORS check       — origin vs. site.allowedOrigins (wildcard for demo-public)
+3. Rate-limit gates — KV counters: per-IP, per-origin, per-day tokens (any one trips → 429)
+4. Validate         — message length, role enum, model enum, history length
+5. History trim     — clamp to site.maxHistoryTurns
+6. Prompt wrap      — every user message wrapped in <user_message>…</user_message>
+7. Provider stream  — OpenAI Chat Completions or Anthropic Messages, both via fetch + SSE
+8. SSE out          — data: {"t":"token","v":"..."}; finally data: {"t":"done","usage":...}
+9. Usage accounting — post-stream, increment daily token budget in KV
 ```
-
-1. Validate + rate-limit per site ID.
-2. If `knowledgeUrl` is set and the site has ingested knowledge, retrieve top-k chunks via pgvector and inject them into the system prompt.
-3. Stream LLM response via SSE; widget parses token-by-token.
-
-### RAG grounding (optional)
-
-When a site first installs with `data-knowledge-url`:
-- Backend fetches the URL (sitemap.xml, Notion export, or docs URL).
-- Crawls up to N pages respecting robots.txt.
-- Chunks + embeds + stores in Postgres scoped by `site_id`.
-- Subsequent chat requests retrieve top-k chunks for each question before generating.
-
-Ingestion is idempotent — re-running doesn't duplicate chunks.
 
 ## Security
 
-- **API key isolation** — LLM keys live on the server; the widget never sees them.
-- **Site ID scoping** — every DB query filters by `site_id`; no cross-tenant leakage.
-- **Rate limiting** — per IP and per site via Cloudflare Workers built-in KV.
-- **Prompt injection defense** — user messages are wrapped in `<user_message>…</user_message>` tags in the system prompt; the model is instructed to treat tagged content as data, not instructions.
-- **Content Security Policy friendly** — no `eval`, no inline styles outside Shadow DOM.
+- **API key isolation** — LLM keys live on the api-worker as Workers secrets; the widget never sees them.
+- **Site-ID scoping** — every request resolves against the site registry; `demo-public` has hard-coded constraints (open CORS but fixed system prompt, short output cap, conversation-length clamp).
+- **Rate limits** — per IP (20 / 10 min), per origin (200 / day), and a global 500k-token daily budget. Any gate trips → 429.
+- **Prompt injection defense** — user messages are wrapped in `<user_message>...</user_message>` tags; the system prompt instructs the model to treat tagged content as data. Not a security guarantee but meaningfully raises the bar.
+- **XSS safe rendering** — message content is set via `textContent`, never `innerHTML`. Widget never evaluates content from the network.
+- **CSP friendly** — no `eval`, no inline styles outside the Shadow Root.
 
 ## Cost profile
 
-For a typical SaaS site with ~500 questions/day:
+For a typical demo at ~500 questions/day:
 
 | Item                           | Monthly cost (USD) |
 | ------------------------------ | ------------------ |
 | Cloudflare Workers (free tier) | $0                 |
-| LLM inference (gpt-4o-mini)    | ~$15               |
-| Postgres + pgvector            | ~$5 (Supabase free tier at low volume) |
-| **Total**                      | **~$20/month per site** |
+| Cloudflare Pages (free tier)   | $0                 |
+| LLM inference (`gpt-4o-mini`)  | ~$15               |
+| **Total**                      | **~$15/month**     |
 
-Well within a productized $1.5k–$5k setup-fee + small retainer.
+The daily token budget caps worst-case abuse spend at ~$2.50/day on the most expensive configured model.
 
 ## Deployment
 
-**Widget bundle:** build and upload to any CDN (Cloudflare R2, S3+CloudFront, Vercel, Netlify).
-**Backend:** `wrangler deploy` to Cloudflare Workers.
-**Database:** Supabase or Neon both work out of the box.
+**Widget bundle:** served from a small Worker (`cdn-worker`) at `embedchat-cdn.brightnwokoro.dev` with `Cache-Control: public, max-age=31536000, immutable`.
+**Backend:** `wrangler deploy` to Cloudflare Workers at `embedchat-api.brightnwokoro.dev`.
+**Demo site:** `wrangler pages deploy` to `embedchat-demo.brightnwokoro.dev`.
 
-See [`docs/DEPLOY.md`](docs/DEPLOY.md).
+Full runbook in [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Roadmap
 
-- [ ] Handoff-to-human mode (hooks to Slack / Crisp / Intercom)
-- [ ] Conversation analytics dashboard
-- [ ] Customer-managed system prompts via hosted admin UI
+Phase 1 is what this repo ships today. Phase 2 and 3 will add:
+
+- [ ] Phase 2 — **RAG grounding** (the headline AI-engineering upgrade): `data-knowledge-url` activates a crawl → chunk → embed → retrieve pipeline against Postgres + pgvector, scoped per site.
+- [ ] Phase 3 — **Productization**: admin UI, named site-ids with client-supplied system prompts + origin allowlists, conversation persistence, analytics, lead capture, handoff-to-human.
 - [ ] Per-site custom fonts loaded via Shadow DOM
-- [ ] Lead capture — optional email gate after N messages
 - [ ] Multi-language auto-detect
 
 ## Contributing
 
-Issues and PRs welcome. Widget bundle size is a hard commitment: any change that bumps it above 35kb minified + gzipped needs a strong justification in the PR.
+Issues and PRs welcome. Widget bundle size is a hard commitment: any change that bumps it above 35kb gzipped needs a strong justification in the PR.
 
 ## License
 
