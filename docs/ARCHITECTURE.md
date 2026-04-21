@@ -74,3 +74,42 @@ Widget                                    api-worker (Hono)                  LLM
 ## Data flow: no PII, no storage
 
 Phase 1 stores nothing. Every request is processed in-memory, streamed out, and forgotten. Only KV counters persist, and they contain no message content — just integer counts against scoped keys.
+
+## Phase 2: RAG retrieval step
+
+```
+Widget                api-worker (Hono)                    Supabase (pgvector)    OpenAI
+  │                        │                                        │               │
+  │─ POST /chat ─────────▶ │                                        │               │
+  │                        │ Phase 1 steps 1-6 (CORS, rate-limit,   │               │
+  │                        │   validate, trim, wrap)                │               │
+  │                        │                                        │               │
+  │                        │ 7a. If site.status=ready in sites:     │               │
+  │                        │   ─── GET /rest/v1/sites ───────────▶ │               │
+  │                        │ ◀─ site row ─────────────────────────  │               │
+  │                        │   ─── POST /v1/embeddings (query) ─────────────────▶ │
+  │                        │ ◀─ embedding ──────────────────────────────────────── │
+  │                        │   ─── POST /rest/v1/rpc/match_chunks ─▶               │
+  │                        │ ◀─ top-5 chunks ──────────────────────                │
+  │                        │   build system prompt with <context>                   │
+  │                        │                                        │               │
+  │                        │ 7. Provider stream ─ POST /v1/chat/completions ─────▶ │
+  │ ◀── SSE tokens ─────── │ ◀── stream chunks ───────────────────────────────── │
+  │ ◀── SSE done ───────── │   incrementTokens(KV)                                  │
+```
+
+## Phase 2 file additions
+
+| Path | Responsibility |
+|---|---|
+| `supabase/schema.sql`                      | DDL: sites + chunks + match_chunks RPC |
+| `ingestion/bin/ingest.ts`                  | CLI entry (`pnpm ingest`) |
+| `ingestion/src/chunk/markdown.ts`          | Markdown-aware recursive splitter |
+| `ingestion/src/chunk/typescript.ts`        | Top-level-decl splitter via TS compiler API |
+| `ingestion/src/embed/openai.ts`            | Batched embedding calls |
+| `ingestion/src/store/supabase.ts`          | Upsert site + replace chunks |
+| `ingestion/src/orchestrator.ts`            | Wires crawl → chunk → embed → store |
+| `api-worker/src/rag/embed-query.ts`        | Query embedding per chat |
+| `api-worker/src/rag/retrieve.ts`           | Site state + top-k via RPC; fails closed |
+| `api-worker/src/rag/context.ts`            | Formats `<context>` blocks with escaping |
+| `api-worker/src/routes/chat.ts` (modified) | Inserts step 7a |

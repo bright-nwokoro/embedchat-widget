@@ -100,3 +100,79 @@ wrangler secret put ANTHROPIC_API_KEY
 ## Cost ceiling
 
 The `demo-public` daily token budget is 500,000. At worst-case pricing (Claude Haiku 4.5 at $5/1M output) that caps spend at ~$2.50/day. To change, edit `LIMITS.DAILY_TOKEN_BUDGET` in `api-worker/src/ratelimit.ts` and redeploy.
+
+## Supabase setup (Phase 2)
+
+RAG grounding requires a Supabase Postgres project with pgvector.
+
+### 1. Create the project
+
+1. Go to https://supabase.com and create a new project (free tier is sufficient).
+2. Note three values from Settings → API:
+   - `Project URL` (`SUPABASE_URL`)
+   - `anon` public key (`SUPABASE_ANON_KEY`)
+   - `service_role` secret key (`SUPABASE_SERVICE_ROLE_KEY`)
+
+### 2. Apply the schema
+
+In the SQL Editor, paste the contents of `supabase/schema.sql` and run. Verify:
+
+```sql
+select * from sites;  -- empty
+select count(*) from chunks;  -- 0
+select proname from pg_proc where proname = 'match_chunks';  -- returns match_chunks
+```
+
+### 3. Configure ingestion
+
+```bash
+cp ingestion/.env.example ingestion/.env
+# Edit ingestion/.env with your three Supabase values + OPENAI_API_KEY
+```
+
+Keys in `.env`:
+- `SUPABASE_URL` (same as above)
+- `SUPABASE_SERVICE_ROLE_KEY` (for bulk writes — never deploy this to Workers)
+- `OPENAI_API_KEY`
+
+### 4. Run ingestion
+
+```bash
+pnpm ingest
+```
+
+Expected: a summary line reporting chunk count. Verify in Supabase:
+
+```sql
+select status, chunk_count, last_indexed_at from sites where site_id = 'demo-public';
+```
+
+Should show `ready`, a chunk count ≥ 40, and a recent timestamp.
+
+### 5. Add Supabase secrets to api-worker
+
+```bash
+cd api-worker
+wrangler secret put SUPABASE_URL
+wrangler secret put SUPABASE_ANON_KEY
+```
+
+Note: use the **anon** key for api-worker (read-only path), not the service role.
+
+### 6. Redeploy
+
+```bash
+pnpm deploy
+```
+
+### 7. Verify grounded responses
+
+Visit the live demo and ask "how does rate limiting work?" — the response should mention specific sources (e.g. `api-worker/src/ratelimit.ts`).
+
+### Refreshing the knowledge base
+
+Whenever the repo changes, re-run `pnpm ingest`. It's idempotent: chunks for `demo-public` are wiped and reinserted on every run.
+
+### Graceful degradation
+
+If Supabase becomes unreachable, `/chat` falls back to ungrounded responses — no 500s, no user-visible error. Verify with `curl https://embedchat-api.brightnwokoro.dev/chat -d '...'` while `SUPABASE_URL` points somewhere bogus.

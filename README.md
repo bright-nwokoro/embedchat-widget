@@ -1,6 +1,6 @@
 # EmbedChat
 
-> A drop-in AI chat widget for any website. One `<script>` tag, Shadow-DOM isolated, configured by data-attributes. ~3.6kb gzipped (well under the 35kb budget).
+> A drop-in AI chat widget for any website. One `<script>` tag, Shadow-DOM isolated, configured by data-attributes. ~3.6kb gzipped. Phase 2 adds RAG grounding — the demo is a bot that knows the EmbedChat codebase.
 
 **🔗 Live demo:** [https://embedchat-demo.brightnwokoro.dev](https://embedchat-demo.brightnwokoro.dev)
 **👤 Built by:** [Bright Nwokoro](https://brightnwokoro.dev) · [hello@brightnwokoro.dev](mailto:hello@brightnwokoro.dev)
@@ -195,6 +195,16 @@ embedchat-widget/
 - **XSS safe rendering** — message content is set via `textContent`, never `innerHTML`. Widget never evaluates content from the network.
 - **CSP friendly** — no `eval`, no inline styles outside the Shadow Root.
 
+## RAG grounding (Phase 2)
+
+The `demo-public` site-id is grounded on the EmbedChat repo itself. Ask the demo bot things like "how does rate limiting work?" or "what's in chat.ts?" — it retrieves from the indexed codebase and cites sources.
+
+- **Ingestion** is a local CLI (`pnpm ingest`): crawls a hardcoded source allowlist (README, specs, selected source files), chunks with Markdown/TypeScript awareness, embeds with OpenAI `text-embedding-3-small`, upserts to Supabase pgvector.
+- **Retrieval** happens inside `/chat`: embed the latest user message, top-5 cosine search, inject `<context>` blocks into the system prompt.
+- **Best-effort**: if Supabase is unreachable, chat falls back to ungrounded responses. No 500s, no hard dependency.
+
+Deploy this for your own site: see [`docs/DEPLOY.md`](docs/DEPLOY.md#supabase-setup-phase-2).
+
 ## Cost profile
 
 For a typical demo at ~500 questions/day:
@@ -220,12 +230,16 @@ Full runbook in `[docs/DEPLOY.md](docs/DEPLOY.md)`.
 
 ## Roadmap
 
-Phase 1 is what this repo ships today. Phase 2 and 3 will add:
+Phase 1 and Phase 2 ship today:
+- ✅ **Phase 1** — Widget + streaming LLM backend + demo site.
+- ✅ **Phase 2** — **RAG grounding**: `demo-public` is grounded on the EmbedChat repo itself via Supabase pgvector. Ask about rate limits or the chat route, and the bot cites specific source files.
 
-- Phase 2 — **RAG grounding** (the headline AI-engineering upgrade): `data-knowledge-url` activates a crawl → chunk → embed → retrieve pipeline against Postgres + pgvector, scoped per site.
-- Phase 3 — **Productization**: admin UI, named site-ids with client-supplied system prompts + origin allowlists, conversation persistence, analytics, lead capture, handoff-to-human.
-- Per-site custom fonts loaded via Shadow DOM
-- Multi-language auto-detect
+Phase 3 adds:
+- [ ] Arbitrary-site RAG via `data-knowledge-url` — ingest-worker + crawler, same retrieval path.
+- [ ] Admin UI for named site-ids with per-site system prompts + origin allowlists.
+- [ ] Conversation persistence, analytics, lead capture, handoff-to-human.
+- [ ] Per-site custom fonts loaded via Shadow DOM.
+- [ ] Multi-language auto-detect.
 
 ## Contributing
 
