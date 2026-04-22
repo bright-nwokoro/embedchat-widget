@@ -29,6 +29,12 @@ create table if not exists chunks (
 create index if not exists chunks_site_idx on chunks (site_id);
 create index if not exists chunks_embedding_hnsw on chunks using hnsw (embedding vector_cosine_ops);
 
+-- Supabase auto-enables RLS on new tables. For Phase 2 we're single-tenant and
+-- the api-worker reads via the anon key, so disable RLS here. Phase 3 will
+-- re-enable with per-site policies when named site-ids share the DB.
+alter table sites disable row level security;
+alter table chunks disable row level security;
+
 -- Similarity search as an RPC (returns fewer round-trips than PostgREST for pgvector).
 create or replace function match_chunks (
   query_embedding vector(1536),

@@ -121,7 +121,14 @@ In the SQL Editor, paste the contents of `supabase/schema.sql` and run. Verify:
 select * from sites;  -- empty
 select count(*) from chunks;  -- 0
 select proname from pg_proc where proname = 'match_chunks';  -- returns match_chunks
+-- RLS is explicitly disabled by the schema (required so anon-key reads work);
+-- confirm with:
+select tablename, rowsecurity from pg_tables
+where schemaname = 'public' and tablename in ('sites','chunks');
+-- both rows should show rowsecurity = false.
 ```
+
+**If `rowsecurity = true` on either table** (Supabase auto-enables RLS on some project templates), re-run the schema — it includes explicit `disable row level security` statements. Without this, the api-worker's anon-key reads return empty and chat silently falls back to ungrounded.
 
 ### 3. Configure ingestion
 
