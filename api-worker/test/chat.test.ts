@@ -346,8 +346,8 @@ describe("POST /chat with RAG", () => {
     const elapsed = Date.now() - t0;
     expect(res.status).toBe(200);
     await res.text();
-    // Should fall back to ungrounded after the 2000ms RAG timeout, not hang indefinitely.
-    expect(elapsed).toBeLessThan(5000);
+    // Should fall back to ungrounded after the 5000ms RAG timeout, not hang indefinitely.
+    expect(elapsed).toBeLessThan(8000);
 
     const openaiBody = JSON.parse(capturedOpenAIBody.body);
     const systemMsg = openaiBody.messages.find((m: any) => m.role === "system");

@@ -155,7 +155,12 @@ chatRoute.post("/", async (c) => {
 
   const wrapped = buildMessages(trimmed);
 
-  // Step 7a: best-effort RAG retrieval (capped at 2000ms per spec §4.1).
+  // Step 7a: best-effort RAG retrieval (capped at 5000ms).
+  // Spec §4.1 originally said 2000ms, but OpenAI embedding cold-start plus
+  // the Supabase round-trip routinely takes 1.5-2s on first hit; 2000ms
+  // raced the embed and killed grounded responses. 5s is comfortably above
+  // the observed p99 while still being tight enough that a genuinely hung
+  // upstream doesn't stall the user.
   let systemPromptFinal = systemPrompt;
   try {
     const ragPromise = (async () => {
@@ -177,7 +182,7 @@ chatRoute.post("/", async (c) => {
       );
     })();
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2000),
+      setTimeout(() => resolve(null), 5000),
     );
     const chunks = await Promise.race([ragPromise, timeoutPromise]);
     if (chunks && chunks.length > 0) {

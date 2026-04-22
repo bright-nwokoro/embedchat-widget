@@ -155,7 +155,7 @@ Retrieval is **never a hard dependency**:
 - If Supabase is unreachable → log, proceed without RAG.
 - If query embedding fails (OpenAI returns 5xx) → log, proceed without RAG.
 - If retrieval returns zero chunks → proceed without RAG (chunks table is empty or site not indexed).
-- If retrieval takes > 2000ms → timeout, proceed without RAG.
+- If retrieval takes > 5000ms → timeout, proceed without RAG. (Original spec said 2000ms; observed cold-start embedding + Supabase round-trip routinely exceeds 2s, so the ceiling was raised after local smoke testing revealed the 2s budget killed grounded replies on first query.)
 
 User-visible behavior: chat always works. Grounding is additive when available. This matches production RAG patterns and eliminates the failure-mode where a dependency outage kills the entire `/chat` endpoint.
 
