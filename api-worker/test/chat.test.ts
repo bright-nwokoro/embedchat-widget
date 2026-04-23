@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SELF, env } from "cloudflare:test";
+import { clearCache as clearSitesDbCache } from "../src/sites-db";
 
 // Inlined because readFileSync is unavailable in Miniflare runtime.
 // Reference copy at test/fixtures/openai-short.txt.
@@ -11,11 +12,41 @@ data: [DONE]
 
 `;
 
+/** Build a stub Supabase sites row for sites-db.getSite lookups. */
+function siteRow(siteId: string, overrides: Record<string, unknown> = {}) {
+  const isDemoPublic = siteId === "demo-public";
+  return {
+    site_id: siteId,
+    name: "Test",
+    knowledge_source: null,
+    status: "ready",
+    chunk_count: 10,
+    last_indexed_at: null,
+    allowed_origins: isDemoPublic ? ["*"] : ["https://example.com"],
+    system_prompt: "demo system prompt",
+    allow_system_prompt_override: false,
+    allowed_models: ["gpt-4o-mini", "claude-haiku"],
+    default_model: "gpt-4o-mini",
+    max_message_chars: 2000,
+    max_history_turns: 10,
+    max_output_tokens: 400,
+    error_message: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any) => {
-      if (String(url).startsWith("https://api.openai.com")) {
+      const u = String(url);
+      if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+        return new Response(JSON.stringify([siteRow("demo-public")]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (u.startsWith("https://api.openai.com")) {
         return new Response(OPENAI_SHORT, {
           status: 200,
           headers: { "content-type": "text/event-stream" },
@@ -28,6 +59,10 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("POST /chat", () => {
+  beforeEach(() => {
+    clearSitesDbCache();
+  });
+
   it("streams SSE tokens for demo-public", async () => {
     const res = await SELF.fetch("https://fake/chat", {
       method: "POST",
@@ -53,6 +88,16 @@ describe("POST /chat", () => {
   });
 
   it("returns 404 for unknown siteId", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any) => {
+        const u = String(url);
+        if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
     const res = await SELF.fetch("https://fake/chat", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://a.com", "cf-connecting-ip": "5.5.5.6" },
@@ -145,6 +190,10 @@ describe("POST /chat", () => {
 });
 
 describe("POST /chat with RAG", () => {
+  beforeEach(() => {
+    clearSitesDbCache();
+  });
+
   it("injects <context> into the system prompt when site.status=ready", async () => {
     const capturedOpenAIBody = { body: "" };
 
@@ -152,6 +201,12 @@ describe("POST /chat with RAG", () => {
       "fetch",
       vi.fn(async (url: any, init?: any) => {
         const u = String(url);
+        if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+          return new Response(JSON.stringify([siteRow("demo-public")]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
         if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
           return new Response(
             JSON.stringify([
@@ -222,6 +277,9 @@ describe("POST /chat with RAG", () => {
       "fetch",
       vi.fn(async (url: any, init?: any) => {
         const u = String(url);
+        if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+          return new Response(JSON.stringify([siteRow("demo-public")]), { status: 200 });
+        }
         if (u.startsWith(env.SUPABASE_URL)) {
           return new Response("upstream down", { status: 503 });
         }
@@ -265,6 +323,12 @@ describe("POST /chat with RAG", () => {
       "fetch",
       vi.fn(async (url: any, init?: any) => {
         const u = String(url);
+        if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+          return new Response(JSON.stringify([siteRow("demo-public")]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
         if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
           return new Response(
             JSON.stringify([
@@ -313,6 +377,12 @@ describe("POST /chat with RAG", () => {
       "fetch",
       vi.fn(async (url: any, init?: any) => {
         const u = String(url);
+        if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+          return new Response(JSON.stringify([siteRow("demo-public")]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
         if (u.startsWith(env.SUPABASE_URL)) {
           // Never resolves — simulates a hung Supabase.
           return new Promise<Response>(() => {});

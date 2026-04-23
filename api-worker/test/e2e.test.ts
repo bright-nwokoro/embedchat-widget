@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SELF, env } from "cloudflare:test";
+import { clearCache as clearSitesDbCache } from "../src/sites-db";
 
 const OPENAI_SHORT = `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}
 
@@ -10,10 +11,33 @@ data: [DONE]
 `;
 
 beforeEach(() => {
+  clearSitesDbCache();
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any) => {
       const u = String(url);
+      if (u.match(/\/rest\/v1\/sites\?select=\*/)) {
+        return new Response(
+          JSON.stringify([{
+            site_id: "demo-public",
+            name: "Demo",
+            knowledge_source: null,
+            status: "ready",
+            chunk_count: 1,
+            last_indexed_at: null,
+            allowed_origins: ["*"],
+            system_prompt: "demo system prompt",
+            allow_system_prompt_override: false,
+            allowed_models: ["gpt-4o-mini", "claude-haiku"],
+            default_model: "gpt-4o-mini",
+            max_message_chars: 2000,
+            max_history_turns: 10,
+            max_output_tokens: 400,
+            error_message: null,
+          }]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
       if (u.startsWith(env.SUPABASE_URL + "/rest/v1/sites")) {
         return new Response(
           JSON.stringify([

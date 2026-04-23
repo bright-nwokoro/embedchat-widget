@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../../worker-configuration";
-import { getSite } from "../sites";
+import { getSite } from "../sites-db";
 import { buildMessages } from "../prompt";
 import {
   checkIpLimit,
@@ -80,7 +80,7 @@ chatRoute.post("/", async (c) => {
     return c.json({ error: "invalid-siteId" }, 400);
   }
 
-  const site = getSite(body.siteId);
+  const site = await getSite(c.env, body.siteId);
   if (!site) {
     return c.json({ error: "unknown-site" }, 404);
   }
@@ -166,7 +166,7 @@ chatRoute.post("/", async (c) => {
     const ragPromise = (async () => {
       const ragState = await getSiteRagState(
         c.env.SUPABASE_URL,
-        c.env.SUPABASE_ANON_KEY,
+        c.env.SUPABASE_SERVICE_ROLE_KEY,
         body.siteId,
       );
       if (ragState?.status !== "ready") return null;
@@ -175,7 +175,7 @@ chatRoute.post("/", async (c) => {
       const queryEmbedding = await embedQuery(lastUserMsg, c.env.OPENAI_API_KEY);
       return await retrieveChunks(
         c.env.SUPABASE_URL,
-        c.env.SUPABASE_ANON_KEY,
+        c.env.SUPABASE_SERVICE_ROLE_KEY,
         body.siteId,
         queryEmbedding,
         5,
