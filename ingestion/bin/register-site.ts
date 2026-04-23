@@ -22,20 +22,20 @@ function parseArgs(argv: string[]): Args {
   const args: Args = { command: "register" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
-    if (a === "--site-id") args.siteId = argv[++i];
-    else if (a === "--name") args.name = argv[++i];
-    else if (a === "--knowledge-url") args.knowledgeUrl = argv[++i];
-    else if (a === "--system-prompt") args.systemPrompt = argv[++i];
+    if (a === "--site-id") args.siteId = argv[++i]!;
+    else if (a === "--name") args.name = argv[++i]!;
+    else if (a === "--knowledge-url") args.knowledgeUrl = argv[++i]!;
+    else if (a === "--system-prompt") args.systemPrompt = argv[++i]!;
     else if (a === "--allowed-origins") args.allowedOrigins = argv[++i]!.split(",").map((s) => s.trim());
     else if (a === "--status") {
       args.command = "status";
-      args.siteId = argv[++i];
+      args.siteId = argv[++i]!;
     } else if (a === "--reingest") {
       args.command = "reingest";
-      args.siteId = argv[++i];
+      args.siteId = argv[++i]!;
     } else if (a === "--delete") {
       args.command = "delete";
-      args.siteId = argv[++i];
+      args.siteId = argv[++i]!;
     }
   }
   return args;
