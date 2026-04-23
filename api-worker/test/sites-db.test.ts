@@ -46,7 +46,7 @@ describe("getSite", () => {
     const site = await getSite(env, "acme");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url] = fetchMock.mock.calls[0] as [string];
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
     expect(String(url)).toContain("/rest/v1/sites?select=*&site_id=eq.acme");
     expect(site).not.toBeNull();
     expect(site!.id).toBe("acme");
