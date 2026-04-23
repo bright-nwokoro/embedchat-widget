@@ -8,6 +8,8 @@ import { createServiceClient, markSiteStatus, replaceChunks } from "./supabase";
 
 const DELAY_MS = 250;
 
+// Any throw retries the entire job; partial progress is discarded. Acceptable for
+// Phase 3a (≤200 pages per sitemap); revisit if per-page checkpointing becomes worthwhile.
 async function processJob(env: Env, job: IngestJob): Promise<void> {
   const sb = createServiceClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   await markSiteStatus(sb, job.siteId, { status: "indexing", error_message: null });
