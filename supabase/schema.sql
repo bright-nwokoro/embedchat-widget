@@ -1,8 +1,9 @@
--- EmbedChat Phase 2 schema. Run in Supabase SQL Editor on a fresh project.
+-- EmbedChat Phase 3a schema. Run in Supabase SQL Editor on a fresh project.
+-- Existing Phase 2 projects should run migrations/2026-04-22-phase-3a.sql instead.
 
 create extension if not exists vector;
 
--- Per-site RAG state (generalized for Phase 3).
+-- Per-site config + RAG state.
 create table if not exists sites (
   site_id text primary key,
   name text,
@@ -10,7 +11,16 @@ create table if not exists sites (
   last_indexed_at timestamptz,
   chunk_count integer not null default 0,
   status text not null default 'pending'
-    check (status in ('pending', 'indexing', 'ready', 'failed'))
+    check (status in ('pending', 'indexing', 'ready', 'failed')),
+  allowed_origins text[] not null default '{}',
+  system_prompt text not null default '',
+  allow_system_prompt_override boolean not null default false,
+  allowed_models text[] not null default '{"gpt-4o-mini","claude-haiku"}',
+  default_model text not null default 'gpt-4o-mini',
+  max_message_chars integer not null default 2000,
+  max_history_turns integer not null default 10,
+  max_output_tokens integer not null default 400,
+  error_message text
 );
 
 -- Chunks with embeddings.
@@ -29,13 +39,7 @@ create table if not exists chunks (
 create index if not exists chunks_site_idx on chunks (site_id);
 create index if not exists chunks_embedding_hnsw on chunks using hnsw (embedding vector_cosine_ops);
 
--- Supabase auto-enables RLS on new tables. For Phase 2 we're single-tenant and
--- the api-worker reads via the anon key, so disable RLS here. Phase 3 will
--- re-enable with per-site policies when named site-ids share the DB.
-alter table sites disable row level security;
-alter table chunks disable row level security;
-
--- Similarity search as an RPC (returns fewer round-trips than PostgREST for pgvector).
+-- Similarity search RPC.
 create or replace function match_chunks (
   query_embedding vector(1536),
   match_site_id text,
@@ -61,3 +65,8 @@ as $$
   order by c.embedding <=> query_embedding
   limit match_count;
 $$;
+
+-- RLS on. api-worker + ingest-worker + CLI all use service_role which bypasses RLS.
+-- Anon/authenticated roles have no policies → no access.
+alter table sites enable row level security;
+alter table chunks enable row level security;
