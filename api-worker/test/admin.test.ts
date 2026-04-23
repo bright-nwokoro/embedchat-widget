@@ -259,3 +259,124 @@ describe("GET /admin/sites/:siteId", () => {
     });
   });
 });
+
+describe("POST /admin/sites/:siteId/reingest", () => {
+  beforeEach(() => {
+    clearSitesDbCache();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const authHeader = () => ({ authorization: `Bearer ${env.ADMIN_API_KEY}` });
+
+  it("returns 404 if site does not exist", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: any, init?: any) => {
+        if ((init as any)?.method === "GET") {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+    const res = await SELF.fetch("https://fake/admin/sites/none/reingest", {
+      method: "POST",
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("happy path: updates status, clears error_message, enqueues", async () => {
+    let patchBody: any = null;
+    let queueSends = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: any, init?: any) => {
+        const url = String(u);
+        const method = (init as any)?.method;
+        if (method === "GET" && url.includes("/rest/v1/sites")) {
+          return new Response(
+            JSON.stringify([
+              { site_id: "acme-docs", knowledge_source: "https://docs.acme.com/sitemap.xml" },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (method === "PATCH" && url.includes("/rest/v1/sites")) {
+          patchBody = JSON.parse((init as any).body);
+          return new Response(JSON.stringify([{}]), { status: 200 });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+    const originalSend = env.INGEST_QUEUE.send.bind(env.INGEST_QUEUE);
+    (env.INGEST_QUEUE as any).send = vi.fn(async (msg: any) => {
+      queueSends++;
+      return originalSend(msg);
+    });
+
+    const res = await SELF.fetch("https://fake/admin/sites/acme-docs/reingest", {
+      method: "POST",
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(202);
+    expect(patchBody).toMatchObject({ status: "pending", error_message: null });
+    expect(queueSends).toBe(1);
+
+    (env.INGEST_QUEUE as any).send = originalSend;
+  });
+});
+
+describe("DELETE /admin/sites/:siteId", () => {
+  beforeEach(() => {
+    clearSitesDbCache();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const authHeader = () => ({ authorization: `Bearer ${env.ADMIN_API_KEY}` });
+
+  it("returns 404 if site does not exist (Supabase 200 + empty delete result)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: any, init?: any) => {
+        const method = (init as any)?.method;
+        if (method === "DELETE") {
+          return new Response("[]", {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+    const res = await SELF.fetch("https://fake/admin/sites/none", {
+      method: "DELETE",
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 200 + ok on successful delete", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: any, init?: any) => {
+        const method = (init as any)?.method;
+        if (method === "DELETE") {
+          return new Response(JSON.stringify([{ site_id: "acme" }]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+    const res = await SELF.fetch("https://fake/admin/sites/acme", {
+      method: "DELETE",
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body).toEqual({ ok: true });
+  });
+});
