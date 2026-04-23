@@ -8,15 +8,17 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm --filter=widget build && pnpm --filter=cdn-worker build && pnpm --filter=api-worker build && pnpm --filter=demo build",
+    "build": "pnpm --filter=widget build && pnpm --filter=cdn-worker build && pnpm --filter=api-worker build && pnpm --filter=ingest-worker build && pnpm --filter=demo build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "deploy": "pnpm run build && pnpm --filter=api-worker deploy && pnpm --filter=cdn-worker deploy && pnpm --filter=demo deploy",
+    "deploy": "pnpm run build && pnpm --filter=api-worker deploy && pnpm --filter=cdn-worker deploy && pnpm --filter=ingest-worker deploy && pnpm --filter=demo deploy",
     "dev:api": "pnpm --filter=api-worker dev",
     "dev:widget": "pnpm --filter=widget dev",
     "dev:demo": "pnpm --filter=demo dev",
-    "ingest": "pnpm --filter=ingestion ingest"
+    "dev:ingest": "pnpm --filter=ingest-worker dev",
+    "ingest": "pnpm --filter=ingestion ingest",
+    "register-site": "pnpm --filter=ingestion register-site"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

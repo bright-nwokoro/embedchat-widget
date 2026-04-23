@@ -4,3 +4,4 @@ packages:
   - cdn-worker
   - demo
   - ingestion
+  - ingest-worker
