@@ -196,3 +196,66 @@ describe("POST /admin/sites", () => {
     expect(body.error).toBe("site-exists");
   });
 });
+
+describe("GET /admin/sites/:siteId", () => {
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const authHeader = () => ({ authorization: `Bearer ${env.ADMIN_API_KEY}` });
+
+  it("returns 401 without auth", async () => {
+    const res = await SELF.fetch("https://fake/admin/sites/acme");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when site does not exist", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const res = await SELF.fetch("https://fake/admin/sites/no-such", {
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns site state when site exists", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify([
+            {
+              site_id: "acme-docs",
+              name: "Acme Docs",
+              knowledge_source: "https://docs.acme.com/sitemap.xml",
+              status: "ready",
+              chunk_count: 287,
+              last_indexed_at: "2026-04-22T18:03:11Z",
+              error_message: null,
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+    const res = await SELF.fetch("https://fake/admin/sites/acme-docs", {
+      headers: authHeader(),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body).toMatchObject({
+      siteId: "acme-docs",
+      name: "Acme Docs",
+      knowledgeUrl: "https://docs.acme.com/sitemap.xml",
+      status: "ready",
+      chunkCount: 287,
+      lastIndexedAt: "2026-04-22T18:03:11Z",
+    });
+  });
+});

@@ -156,3 +156,44 @@ adminRoute.post("/sites", async (c) => {
 
   return c.json({ siteId, status: "pending" }, 202);
 });
+
+adminRoute.get("/sites/:siteId", async (c) => {
+  const siteId = c.req.param("siteId");
+  if (!SITE_ID_RE.test(siteId)) {
+    return c.json({ error: "invalid-siteId" }, 400);
+  }
+  const url =
+    `${c.env.SUPABASE_URL}/rest/v1/sites` +
+    `?select=site_id,name,knowledge_source,status,chunk_count,last_indexed_at,error_message` +
+    `&site_id=eq.${encodeURIComponent(siteId)}&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: c.env.SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${c.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    return c.json({ error: "upstream-failed" }, 502);
+  }
+  const rows = (await res.json()) as Array<{
+    site_id: string;
+    name: string | null;
+    knowledge_source: string | null;
+    status: string;
+    chunk_count: number;
+    last_indexed_at: string | null;
+    error_message: string | null;
+  }>;
+  const row = rows[0];
+  if (!row) return c.json({ error: "not-found" }, 404);
+  return c.json({
+    siteId: row.site_id,
+    name: row.name,
+    knowledgeUrl: row.knowledge_source,
+    status: row.status,
+    chunkCount: row.chunk_count,
+    lastIndexedAt: row.last_indexed_at,
+    errorMessage: row.error_message,
+  });
+});
