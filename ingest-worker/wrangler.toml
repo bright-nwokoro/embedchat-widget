@@ -1,0 +1,12 @@
+name = "embedchat-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[queues.consumers]]
+queue = "embedchat-ingest"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "embedchat-ingest-dlq"
