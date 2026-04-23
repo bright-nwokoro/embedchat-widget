@@ -94,3 +94,45 @@ Phase 1 stores nothing. Every request is processed in-memory, streamed out, and 
 | `api-worker/src/rag/retrieve.ts`           | Site state + top-k via RPC; fails open (returns empty on error for graceful fallback) |
 | `api-worker/src/rag/context.ts`            | Formats `<context>` blocks with escaping |
 | `api-worker/src/routes/chat.ts` (modified) | Inserts step 7a |
+
+## Phase 3a: Dynamic ingestion pipeline
+
+```
+Operator (CLI)                api-worker                  Cloudflare Queue         ingest-worker              Supabase
+     │                            │                             │                        │                        │
+     │─ POST /admin/sites ───────▶│                             │                        │                        │
+     │   + Bearer token           │ 1. Validate + HEAD preflight│                        │                        │
+     │                            │ 2. INSERT sites (pending)   │                        │                        │
+     │                            │ 3. queue.send()             │                        │                        │
+     │ ◀── 202 Accepted ──────────│─────────────────────────────▶                         │                        │
+     │                            │                             │                        │                        │
+     │                            │                             │ 4. deliver batch ──────▶                        │
+     │                            │                             │                        │ 5. PATCH sites='indexing'
+     │                            │                             │                        │ 6. GET sitemap.xml ────▶
+     │                            │                             │                        │ 7. For each URL:        │
+     │                            │                             │                        │      fetch HTML         │
+     │                            │                             │                        │      HTMLRewriter extract
+     │                            │                             │                        │      plain-text chunk   │
+     │                            │                             │                        │ 8. POST /v1/embeddings ▶
+     │                            │                             │                        │ 9. DELETE chunks + INSERT
+     │                            │                             │                        │ 10. PATCH sites='ready'
+     │                            │                             │                        │                        │
+     │─ pnpm register-site --status <siteId> ───▶ GET /admin/sites/:id                    │                        │
+     │ ◀── { status: "ready" } ───────────────────────────────────────────────────────────│                        │
+```
+
+## Phase 3a file additions
+
+| Path | Responsibility |
+|---|---|
+| `api-worker/src/sites-db.ts`                   | Supabase-backed `getSite()` with 10s TTL cache |
+| `api-worker/src/queue.ts`                      | `enqueueIngest()` helper |
+| `api-worker/src/routes/admin.ts`               | POST/GET/reingest/DELETE sites + bearer auth |
+| `ingest-worker/src/index.ts`                   | Queue consumer; orchestrates crawl → chunk → embed → store |
+| `ingest-worker/src/sitemap.ts`                 | Sitemap.xml fetch + parse |
+| `ingest-worker/src/extract.ts`                 | HTMLRewriter-based text extraction |
+| `ingest-worker/src/plaintext-chunker.ts`       | Paragraph-packing chunker with 50-token overlap |
+| `ingest-worker/src/embed.ts`                   | Batched OpenAI embedding |
+| `ingest-worker/src/supabase.ts`                | Service-role helpers for status + chunk replacement |
+| `ingestion/bin/register-site.ts`               | CLI wrapper for admin API |
+| `supabase/migrations/2026-04-22-phase-3a.sql`  | Phase 2 → Phase 3a migration |

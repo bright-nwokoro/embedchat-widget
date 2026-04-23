@@ -103,7 +103,7 @@ git clone https://github.com/brightnwokoro/embedchat-widget
 cd embedchat-widget
 
 pnpm install
-pnpm test         # 94 tests: 28 widget + 40 api-worker + 26 ingestion
+pnpm test         # ~127 tests: 28 widget + 58 api-worker + 26 ingestion + 15 ingest-worker
 pnpm build        # widget bundle + Workers dry-run + static demo copy
 ```
 
@@ -205,6 +205,23 @@ The `demo-public` site-id is grounded on the EmbedChat repo itself. Ask the demo
 
 Deploy this for your own site: see [`docs/DEPLOY.md`](docs/DEPLOY.md#supabase-setup-phase-2).
 
+## Bring your own site (Phase 3a)
+
+Register a new site against the live API:
+
+```bash
+pnpm register-site \
+  --site-id acme-docs \
+  --name "Acme Docs" \
+  --knowledge-url https://docs.acme.com/sitemap.xml \
+  --system-prompt "You are Acme's docs assistant. Be concise." \
+  --allowed-origins https://docs.acme.com
+```
+
+Within ~2 min, `pnpm register-site --status acme-docs` reports `status: "ready"`. Drop the widget snippet on your site with `data-site-id="acme-docs"` and the bot answers grounded in your docs.
+
+The same admin API supports `--reingest <id>` (re-crawl) and `--delete <id>` (remove site + chunks). Requires the shared `ADMIN_API_KEY`; Phase 3b replaces this with per-user auth.
+
 ## Cost profile
 
 For a typical demo at ~500 questions/day:
@@ -230,16 +247,17 @@ Full runbook in `[docs/DEPLOY.md](docs/DEPLOY.md)`.
 
 ## Roadmap
 
-Phase 1 and Phase 2 ship today:
+Phase 1, Phase 2, and Phase 3a ship today:
 - ✅ **Phase 1** — Widget + streaming LLM backend + demo site.
-- ✅ **Phase 2** — **RAG grounding**: `demo-public` is grounded on the EmbedChat repo itself via Supabase pgvector. Ask about rate limits or the chat route, and the bot cites specific source files.
+- ✅ **Phase 2** — RAG grounding: `demo-public` is grounded on the EmbedChat repo itself via Supabase pgvector.
+- ✅ **Phase 3a** — **Dynamic RAG**: any site can be registered via `pnpm register-site` or the admin API; `data-knowledge-url` is finally honored. Sitemap-only for now.
 
-Phase 3 adds:
-- [ ] Arbitrary-site RAG via `data-knowledge-url` — ingest-worker + crawler, same retrieval path.
-- [ ] Admin UI for named site-ids with per-site system prompts + origin allowlists.
+Phase 3b+ adds:
+- [ ] Admin UI for self-serve signup and site management.
 - [ ] Conversation persistence, analytics, lead capture, handoff-to-human.
 - [ ] Per-site custom fonts loaded via Shadow DOM.
 - [ ] Multi-language auto-detect.
+- [ ] Recursive domain crawl / Notion / PDF ingestion.
 
 ## Contributing
 

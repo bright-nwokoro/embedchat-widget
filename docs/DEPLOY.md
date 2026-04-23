@@ -183,3 +183,89 @@ Whenever the repo changes, re-run `pnpm ingest`. It's idempotent: chunks for `de
 ### Graceful degradation
 
 If Supabase becomes unreachable, `/chat` falls back to ungrounded responses — no 500s, no user-visible error. Verify with `curl https://embedchat-api.brightnwokoro.dev/chat -d '...'` while `SUPABASE_URL` points somewhere bogus.
+
+## Phase 3a deployment (Dynamic RAG)
+
+Adds the `ingest-worker` Worker, a Queue, and schema changes.
+
+### 1. Create Cloudflare Queues
+
+```bash
+wrangler queues create embedchat-ingest
+wrangler queues create embedchat-ingest-dlq
+```
+
+### 2. Apply Supabase migration
+
+In Supabase SQL Editor, paste the contents of `supabase/migrations/2026-04-22-phase-3a.sql` and run. Verify:
+
+```sql
+select column_name from information_schema.columns
+where table_name = 'sites' and column_name = 'allowed_origins';
+-- one row; column exists.
+
+select rowsecurity from pg_tables where tablename in ('sites','chunks');
+-- both = true; RLS re-enabled.
+
+select status, allowed_origins, system_prompt from sites where site_id = 'demo-public';
+-- status=ready, allowed_origins={'*'}, system_prompt populated.
+```
+
+### 3. Rotate api-worker secrets
+
+```bash
+cd api-worker
+openssl rand -hex 32
+# copy value, then:
+wrangler secret put ADMIN_API_KEY
+
+wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# old SUPABASE_ANON_KEY is no longer used; can be deleted from Cloudflare dashboard.
+```
+
+### 4. Deploy ingest-worker
+
+```bash
+cd ../ingest-worker
+wrangler secret put SUPABASE_URL
+wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+wrangler secret put OPENAI_API_KEY
+wrangler deploy
+```
+
+### 5. Deploy api-worker (with new code + new secrets)
+
+```bash
+cd ..
+pnpm deploy
+```
+
+Order note: apply the migration (step 2) BEFORE redeploying api-worker (step 5). Between those two steps the live api-worker still uses the old code + ANON_KEY against an RLS-enabled DB — chat breaks briefly (< 60s in practice).
+
+### 6. Register your first site
+
+Add to `ingestion/.env`:
+
+```
+API_URL=https://embedchat-api.brightnwokoro.dev
+ADMIN_API_KEY=<same value you passed to wrangler secret put>
+```
+
+Register:
+
+```bash
+pnpm register-site \
+  --site-id phase-3a-test \
+  --name "Phase 3a test" \
+  --knowledge-url https://brightnwokoro.dev/sitemap.xml \
+  --system-prompt "You are a portfolio assistant for Bright Nwokoro." \
+  --allowed-origins https://brightnwokoro.dev,http://localhost:8080
+```
+
+Expected: 202 Accepted within 1s.
+
+```bash
+pnpm register-site --status phase-3a-test
+```
+
+Within 2 min: `status: "ready"` with chunk_count > 0.
