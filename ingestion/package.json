@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "ingest": "tsx bin/ingest.ts",
+    "register-site": "tsx bin/register-site.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
