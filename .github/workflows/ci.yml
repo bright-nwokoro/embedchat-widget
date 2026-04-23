@@ -30,4 +30,5 @@ jobs:
           fi
       - run: pnpm --filter=cdn-worker build
       - run: pnpm --filter=api-worker build
+      - run: pnpm --filter=ingest-worker build
       - run: pnpm --filter=demo build
