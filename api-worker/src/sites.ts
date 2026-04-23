@@ -1,5 +1,8 @@
 import type { SiteConfig } from "./types";
 
+export type { SiteConfig } from "./types";
+export type { PublicModelId } from "./types";
+
 const DEMO_PROMPT = `You are a demo assistant for EmbedChat, a drop-in AI chat widget.
 Keep answers short, friendly, and helpful.
 If asked how to install or about the code, point users at https://github.com/brightnwokoro/embedchat-widget.
